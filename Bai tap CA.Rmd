@@ -1,0 +1,162 @@
+---
+title: "Bai tap CA"
+author: "Nam Nguyen"
+date: "2025-04-10"
+output:
+  html_document:
+    df_print: paged
+---
+
+-- *Nhập dữ liệu và kiểm tra NA*
+
+```{r}
+setwd("E:\\Uni Study\\PTDL")
+library(readstata13)
+ca_smoking <- read.dta13("ca_smoking.dta")
+sum(is.na(ca_smoking))
+```
+
+-- *Với từng loại quản lý, mức độ không hút thuốc và hút thuốc nặng chiếm bao nhiêu %? Đây là column profile hay row profile?*
+
+cột là trong 1 level qly thì mức độ hút chiếm bnh phần trăm
+dòng là trong 1 mức độ hút hít thì các level qly chiếm nhiêu
+
+
+```{r}
+library(gmodels)
+ca_count1 <- CrossTable(ca_smoking$smoking, ca_smoking$rank) # var truoc laf row; var sau la column
+```
+Mức độ không hút thuốc: senior - secretary lần lượt là 
+senior_mngr | junior_mngr | senior_empl | junior_empl |   secretary
+ 0.364      |       0.222 |       0.490 |       0.205 |       0.400 | 
+ 
+Mức dộ hút nặng
+0.182       |       0.222 |       0.078 |       0.148 |       0.080 
+
+=> Phần trăm prf cột
+
+--Nhóm nhân viên cấp thấp chiếm tỉ lệ bao nhiêu % trong tổng số những người hút
+thuốc nhẹ và hút vừa phải. Đây là column profile hay row profile? 
+
+Giả sử nhóm nhân viên cấp thấp là lvl junior và secretary: 
+
+**Với mức độ nhẹ**:
+junior_empl |   secretary
+0.533       |       0.133
+
+**VỚi mức độ vừa phải**
+junior_empl |   secretary
+      0.532 |       0.113
+      
+=> Profile dòng
+
+
+--  Có mối liên hệ giữa mức độ hút thuốc lá và các loại nhân viên văn phòng khác
+nhau không? Giải thích tại sao? 
+
+```{r}
+library(openxlsx)
+openxlsx::write.xlsx(ca_count1, 'ca_count1.xlsx')
+ca <- read.xlsx('ca_count1.xlsx',1, colNames = TRUE, rowNames = TRUE)
+chisq <- chisq.test(ca)
+chisq
+```
+
+H0: Không Có MLH giữa mức độ hút thuốc và các lvl nhân viên (độc lập)
+H1: Có MLH giữa mức độ hút thuốc và các lvl nhân viên (phụ thuộc)
+
+P_value > 0.05 => BB H0 => Không có mối liên hệ
+
+-- Có bao nhiêu thành phần chính có thể mô tả được dữ liệu? Các thành phần này giải thích được bao nhiêu % sự biến thiên của dữ liệu ban đầu? 
+
+```{r}
+library(FactoMineR)
+library(factoextra)
+#library(xtable)
+res.ca <- CA(ca, graph = FALSE)
+#print(res.ca)
+summary(res.ca)
+```
+
+Có 3 trục tp chính có thể mô tả dữ liệu, giải thích được 100% biến thiên ban đầu
+
+-- Thành phần chính thứ hai giải thích được bao nhiêu % biến thiên trong tổng biến thiên của dữ liệu được giải thích bởi các trục?
+
+11.759%
+
+-- Xác định mass và đóng góp của thuộc tính 'không hút thuốc' trên trục 1. 
+
+*Mass chính là phần trăm giá trị biên theo cột/dòng*
+
+Mass của None
+
+```{r}
+library(ca)
+freq<- table(ca_smoking$smoking, ca_smoking$rank)
+simple_model<- ca(freq)
+summary(simple_model)
+```
+
+mass của none (theo dòng): ri = ni/n => mass của none = 61/193*100 = 31,6%
+
+
+```{r}
+fviz_contrib(res.ca, choice = "row", axes = 1)
+```
+
+Đóng góp của None trên trục 1 = CTR của None trên dim 1 = 65.400
+
+-- Xác định mass và đóng góp của quản lý cấp cao trên trục 1.
+
+Mass của senior_mng: cj = nj/n = 11/193 *100 = 5.69%
+
+
+```{r}
+fviz_contrib(res.ca, choice = "col", axes = 1)
+```
+
+
+Đóng góp của quản lý cấp cao trên trục 1 = CTR của senior_mng trên dim 1 = 0.330
+
+-- Nên giữ lại bao nhiêu trục thành phần chính? Tại sao?
+
+```{r}
+fviz_screeplot(res.ca, addlabels = TRUE, ylim = c(0, 80))
+```
+
+*Xác định tiêu chuẩn*: 
+Số chiều ban đầu của dữ liệu 5x4 (5 cột 4 dòng)
+**PCA theo dòng**: 100/(4-1):33.33 
+**PCA theo cột**: 100/(5-1): 25%
+**Số lượng trục tối thiểu phải có Inertia >90%**
+
+Dim 1 + Dim 2 ~ 99.51 => Đạt đủ các điều kiện. Vì vậy có 2 trục tp chính cần giữ lại.
+
+-- Mô tả mối liên hệ giữa mức độ hút thuốc và các loại nhân viên văn phòng. 
+
+
+Có thể thấy lvl senior ở vị trí EMPL thì sẽ không hút thuốc 
+Ở vị trí mng thì dù là senior hay junior thì sẽ có xu hướng sử dụng thuốc lá, và hút nhiều hơn ở vị trí junior
+junior ở vị trí nhân viên cũng hút thuốc, nhưng cường độ ít hơn
+secretary thì không hút thuốc hoặc ít khi hút
+
+```{r}
+fviz_ca_biplot(res.ca, repel = TRUE) #repel = TRUE to avoid text overlapping
+```
+
+so sánh ở từng cường độ hút, có thể thấy nhóm senior employment là nhóm có tỷ lệ không dùng thuốc lá nhiều nhất, theo sau là secretary. Trái lại, nhóm junior manager lại hút thuốc ở cường độ nặng nhiều nhất
+
+```{r}
+fviz_ca_biplot(res.ca, 
+               map ="rowprincipal", arrow = c(TRUE, FALSE ), # arrow: TRUE: bien dong co vector, FALSE bien cot khong co vector
+               repel = TRUE)
+```
+
+So sánh ở các lvl:
+
+```{r}
+fviz_ca_biplot(res.ca, 
+               map ="colprincipal", arrow = c(FALSE,TRUE ),
+               repel = TRUE)
+```
+
